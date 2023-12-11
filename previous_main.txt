@@ -1,0 +1,438 @@
+# # Required Imports
+# import requests
+# from zk import ZK, const
+# from pyairtable import Table
+# from multiprocessing import Process
+# from time import sleep
+# import redis
+#
+# # Redis Connection:
+# redis_host = "localhost"
+# redis_port = 6379
+# r_handler = redis.StrictRedis(host=redis_host,port=redis_port,decode_responses=True)
+# lock = r_handler.lock('my_lock')
+#
+# # Device Connection Variables
+# checkout_conn = None
+# checkin_conn = None
+#
+# # Instances For Devices:
+# checkout_instance = ZK('192.168.0.4', port=4370, timeout=5, password=0, force_udp=False, ommit_ping=False)
+# checkin_instance = ZK('192.168.0.8', port=4370, timeout=5, password=0, force_udp=False, ommit_ping=False)
+#
+# # Setting up connection to Air Table
+# BASE_ID = "appPgvuZjUx3Cp5wZ"
+# API_KEY = "keyLlwpXsUSV6wkCU"
+# TABLE_NAME = "users"
+# TABLE_ID = "tblpzxpSjU7fxJMi6"
+# table = Table(API_KEY, BASE_ID, TABLE_NAME)
+#
+#
+# # Adding User Test
+# # checkin_conn = checkin_instance.connect()
+# # checkout_conn = checkout_instance.connect()
+# # checkin_conn.set_user(uid=156, name='Test 156', privilege=const.USER_ADMIN, password='', group_id='', user_id='156', card=0)
+# # checkout_conn.set_user(uid=156, name='Test 156', privilege=const.USER_ADMIN, password='', group_id='', user_id='156', card=0)
+#
+# # Delete User Test
+# # checkin_conn.delete_user(user_id=156)
+# # checkout_conn.delete_user(user_id=156)
+#
+# print("Main Script Running....")
+#
+# def sync_deleted_user():
+#         try:
+#             print("Delete script running...")
+#             # connect to devices
+#             checkout_conn = checkout_instance.connect()
+#             checkin_conn = checkin_instance.connect()
+#
+#             # Getting database users to compare with device users
+#             def get_db_users():
+#                 url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_ID}"
+#                 headers = {
+#                     'Authorization': f'Bearer {API_KEY}',
+#                     'Content-Type': 'application/json'
+#                 }
+#                 response = requests.request("GET", url, headers=headers)
+#                 return response
+#             db_data = get_db_users().json()
+#
+#             # Extracting field dictionaries containing actual data of every user
+#             db_users = [user['fields'] for user in db_data['records']]
+#
+#             # Getting user from Airtable with deleted status to deleted from devices
+#             for user in db_users:
+#                 if user['sync_status'] == 'deleted':
+#                     checkin_conn.delete_user(user_id=user['user_id'])
+#                     checkout_conn.delete_user(user_id=user['user_id'])
+#
+#             # Getting users from checkout device
+#             checkout_device_users = checkout_conn.get_users()
+#             # Getting users from checkin device
+#             checkin_device_users = checkin_conn.get_users()
+#
+#             # For checking which user is present in Airtable but deleted from devices
+#             for user in db_users:
+#                 # Checking for checkout device
+#                 checkout_user_exists = False
+#                 for checkout_user in checkout_device_users:
+#                     if checkout_user.name == user['name']:
+#                         checkout_user_exists = True
+#                 if not checkout_user_exists:
+#                     record_id = None
+#                     for db_user in db_data['records']:
+#                         if db_user['fields']['name'] == user['name']:
+#                             record_id = db_user['id']
+#                     table.update(record_id, {'sync_status': 'deleted'})
+#
+#                     # Checking for checkin device
+#                     checkin_user_exists = False
+#                     for checkin_user in checkin_device_users:
+#                         if checkin_user.name == user['name']:
+#                             checkin_user_exists = True
+#                     if not checkin_user_exists:
+#                         record_id = None
+#                         for db_user in db_data['records']:
+#                             if db_user['fields']['name'] == user['name']:
+#                                 record_id = db_user['id']
+#                         table.update(record_id, {'sync_status': 'deleted'})
+#
+#         except Exception as e:
+#             print("Process terminate : {}".format(e))
+#         finally:
+#             if checkout_conn:
+#                 checkout_conn.disconnect()
+#             if checkin_conn:
+#                 checkin_conn.disconnect()
+#             sync_deleted_user()
+#
+#
+# def database_users():
+#     try:
+#         print("Database script running...")
+#         # connect to devices
+#         checkout_conn = checkout_instance.connect()
+#         checkin_conn = checkin_instance.connect()
+#
+#         # Getting users from checkout device
+#         checkout_device_users = checkout_conn.get_users()
+#         # Getting users from checkin device
+#         checkin_device_users = checkin_conn.get_users()
+#
+#         # Getting database users to compare with device users
+#         def get_db_users():
+#             url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_ID}"
+#             headers = {
+#                 'Authorization': f'Bearer {API_KEY}',
+#                 'Content-Type': 'application/json'
+#             }
+#             response = requests.request("GET", url, headers=headers)
+#             return response
+#         db_data = get_db_users().json()
+#
+#         # Extracting field dictionaries containing actual data of every user
+#         db_users = [user['fields'] for user in db_data['records']]
+#
+#         # External loop for iterating over each db user
+#         for user in db_users:
+#             if user['sync_status'] == 'enrolled':
+#                 # Internal loop for adding db user into checkout device
+#                 checkout_user_exists = False
+#                 for checkout_user in checkout_device_users:
+#                     if user['name'] == checkout_user.name:
+#                         checkout_user_exists = True
+#                 if not checkout_user_exists:
+#                     checkout_conn.set_user(uid=user['uid'], name=user['name'], privilege=int(user['privilege']),
+#                                            password='', user_id=str(user['user_id']))
+#
+#                 # Internal loop for adding db user into checkin device
+#                 checkin_user_exists = False
+#                 for checkin_user in checkin_device_users:
+#                     if user['name'] == checkin_user.name:
+#                         checkin_user_exists = True
+#                 if not checkin_user_exists:
+#                     checkin_conn.set_user(uid=user['uid'], name=user['name'], privilege=int(user['privilege']),
+#                                            password='', user_id=str(user['user_id']))
+#
+#     except Exception as e:
+#         print("Process terminate : {}".format(e))
+#     finally:
+#         if checkout_conn:
+#             checkout_conn.disconnect()
+#         if checkin_conn:
+#             checkin_conn.disconnect()
+#         database_users()
+#
+#
+# def checkout_device():
+#     try:
+#         print("Checkout script running...")
+#         # connect to devices
+#         checkout_conn = checkout_instance.connect()
+#         checkin_conn = checkin_instance.connect()
+#
+#         # Getting users from device to add new users into database
+#         checkout_device_users = checkout_conn.get_users()
+#
+#         # Getting database users to compare with device users
+#         def get_db_users():
+#             url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_ID}"
+#             headers = {
+#                 'Authorization': f'Bearer {API_KEY}',
+#                 'Content-Type': 'application/json'
+#             }
+#             response = requests.request("GET", url, headers=headers)
+#             return response
+#         db_data = get_db_users().json()
+#
+#         # Extracting field dictionaries containing actual data of every user
+#         db_users = [user['fields'] for user in db_data['records']]
+#
+#         # If database is empty:
+#         if not db_users:
+#             lock.acquire()
+#             r_handler.set('available','no')
+#             for checkout_device_user in checkout_device_users:
+#                 if checkout_device_user.privilege == const.USER_ADMIN:
+#                     privilege = 'Admin'
+#                 user_to_add = {'uid': checkout_device_user.uid,
+#                                'user_id': int(checkout_device_user.user_id),
+#                                'name': checkout_device_user.name, 'card': checkout_device_user.card,
+#                                'privilege': str(checkout_device_user.privilege),
+#                                'password': checkout_device_user.password,
+#                                 'sync_status':'enrolled'}
+#                 table.create(user_to_add)
+#             r_handler.set("available", "yes")
+#             lock.release()
+#
+#         # If database is not empty:
+#         else:
+#             # External loop for checking every device user:
+#             for checkout_device_user in checkout_device_users:
+#                 checkout_user_exists = False
+#                 # Internal loop for searching device user through all database users
+#                 for user in db_users:
+#                     if user['uid'] == checkout_device_user.uid:
+#                         checkout_user_exists = True
+#                         # If user is found in database but status is deleted
+#                         if user['sync_status'] == 'deleted':
+#                             record_id = None
+#                             for db_user in db_data['records']:
+#                                 if db_user['fields']['name'] == user['name']:
+#                                     record_id = db_user['id']
+#                             table.update(record_id, {'sync_status': 'enrolled'})
+#
+#                 # If device user is not found in database:
+#                 if not checkout_user_exists:
+#                     if checkout_device_user.privilege == const.USER_ADMIN:
+#                         privilege = 'Admin'
+#                     user_to_add = {'uid': checkout_device_user.uid,
+#                                    'user_id': int(checkout_device_user.user_id),
+#                                    'name': checkout_device_user.name, 'card': checkout_device_user.card,
+#                                    'privilege': str(checkout_device_user.privilege),
+#                                    'password': checkout_device_user.password,
+#                                    'sync_status':'enrolled'}
+#                     table.create(user_to_add)
+#
+#                     # Internal loop for checking every checkout user in checkin device
+#                     checkin_device_users = checkin_conn.get_users()
+#                     checkin_user_exists = False
+#                     for checkin_device_user in checkin_device_users:
+#                         if checkin_device_user.uid == checkout_device_user.uid:
+#                             checkin_user_exists = True
+#                     if checkin_user_exists:
+#                         print("User already exist in checkin device")
+#                     else:
+#                         # Setting User to new device
+#                         checkin_conn.set_user(uid=checkout_device_user.uid, name=checkout_device_user.name,
+#                                               privilege=const.USER_DEFAULT,
+#                                               password=checkout_device_user.password,
+#                                               user_id=checkout_device_user.user_id)
+#
+#                 # If device user is found in database
+#                 else:
+#                     print(
+#                         f"User with user_id: {checkout_device_user.user_id} already exists in checkout device's database!")
+#
+#     except Exception as e:
+#         print("Process terminate : {}".format(e))
+#     finally:
+#         if checkout_conn:
+#             checkout_conn.disconnect()
+#         if checkin_conn:
+#             checkin_conn.disconnect()
+#         checkout_device()
+#
+#
+# def checkin_device():
+#     try:
+#         print(f"Checkin script running...")
+#         # connect to devices
+#         checkout_conn = checkout_instance.connect()
+#         checkin_conn = checkin_instance.connect()
+#
+#         # Getting users from device to add new users into database
+#         checkin_device_users = checkin_conn.get_users()
+#
+#         # Getting database users to compare with device users
+#         def get_db_users():
+#             url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_ID}"
+#             headers = {
+#                 'Authorization': f'Bearer {API_KEY}',
+#                 'Content-Type': 'application/json'
+#             }
+#             response = requests.request("GET", url, headers=headers)
+#             return response
+#         db_data = get_db_users().json()
+#
+#         # Extracting field dictionaries containing actual data of every user
+#         db_users = [user['fields'] for user in db_data['records']]
+#
+#         # If database is empty
+#         if r_handler.get('available') == 'yes':
+#             lock.acquire()
+#             if not db_users:
+#                 for checkin_device_user in checkin_device_users:
+#                     if checkin_device_user.privilege == const.USER_ADMIN:
+#                         privilege = 'Admin'
+#                     user_to_add = {'uid': checkin_device_user.uid, 'user_id': int(checkin_device_user.user_id),
+#                                    'name': checkin_device_user.name, 'card': checkin_device_user.card,
+#                                    'privilege': str(checkin_device_user.privilege),
+#                                    'password': checkin_device_user.password,
+#                                    'sync_status':'enrolled'}
+#                     table.create(user_to_add)
+#             lock.release()
+#         # If database is not empty:
+#         else:
+#             # External loop for checking every device user:
+#             for checkin_device_user in checkin_device_users:
+#                 checkin_user_exists = False
+#                 # Internal loop for searching device user in database
+#                 for user in db_users:
+#                     if user['uid'] == checkin_device_user.uid:
+#                         checkin_user_exists = True
+#                         # If user is found in database but status is deleted
+#                         if user['sync_status'] == 'deleted':
+#                             record_id = None
+#                             for db_user in db_data['records']:
+#                                 if db_user['fields']['name'] == user['name']:
+#                                     record_id = db_user['id']
+#                             table.update(record_id, {'sync_status': 'enrolled'})
+#
+#                 # If device user is not found in database:
+#                 if not checkin_user_exists:
+#                     if checkin_device_user.privilege == const.USER_ADMIN:
+#                         privilege = 'Admin'
+#                     user_to_add = {'uid': checkin_device_user.uid,
+#                                    'user_id': int(checkin_device_user.user_id),
+#                                    'name': checkin_device_user.name, 'card': checkin_device_user.card,
+#                                    'privilege': str(checkin_device_user.privilege),
+#                                    'password': checkin_device_user.password,
+#                                    'sync_status':'enrolled'}
+#                     table.create(user_to_add)
+#
+#                     # Internal loop for checking every checkin user in checkout device
+#                     checkout_device_users = checkout_conn.get_users()
+#                     checkout_user_exists = False
+#                     for checkout_device_user in checkout_device_users:
+#                         if checkout_device_user.uid == checkin_device_user.uid:
+#                             checkout_user_exists = True
+#                     if checkout_user_exists:
+#                         print("User already exist in checkout device")
+#                     else:
+#                         # Setting User to new device
+#                         checkout_conn.set_user(uid=checkin_device_user.uid, name=checkin_device_user.name,
+#                                                privilege=const.USER_DEFAULT,
+#                                                password=checkin_device_user.password,
+#                                                user_id=checkin_device_user.user_id)
+#
+#                 # If device user is found in database
+#                 else:
+#                     print(
+#                         f"User with user_id: {checkin_device_user.user_id} already exists in checkin device's database!")
+#
+#     except Exception as e:
+#         print("Process terminate : {}".format(e))
+#     finally:
+#         if checkout_conn:
+#             checkout_conn.disconnect()
+#         if checkin_conn:
+#             checkin_conn.disconnect()
+#         checkin_device()
+#
+#
+# def display_synced_data():
+#     try:
+#         print("Display script running...")
+#         # connect to devices
+#         checkout_conn = checkout_instance.connect()
+#         checkin_conn = checkin_instance.connect()
+#
+#         # Getting users from checkout device
+#         checkout_device_users = checkout_conn.get_users()
+#         # Getting users from checkin device
+#         checkin_device_users = checkin_conn.get_users()
+#
+#         # Getting database users to compare with device users
+#         def get_db_users():
+#             url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_ID}"
+#             headers = {
+#                 'Authorization': f'Bearer {API_KEY}',
+#                 'Content-Type': 'application/json'
+#             }
+#             response = requests.request("GET", url, headers=headers)
+#             return response
+#         db_data = get_db_users().json()
+#
+#         # Extracting field dictionaries containing actual data of every user
+#         db_users = [user['fields'] for user in db_data['records']]
+#
+#         # Display
+#         print("<----||---->")
+#         print(f"Checkout users: {len(checkout_device_users)}")
+#         for user in checkout_device_users:
+#             print(user)
+#         print("<----||---->")
+#         print(f"Checkin users: {len(checkin_device_users)}")
+#         for user in checkin_device_users:
+#             print(user)
+#         print("<----||---->")
+#         print(f"Database users: {len(db_users)}")
+#         for user in db_users:
+#             print(user)
+#         print("<----||---->")
+#
+#     except Exception as e:
+#         print("Process terminate : {}".format(e))
+#     finally:
+#         if checkout_conn:
+#             checkout_conn.disconnect()
+#         if checkin_conn:
+#             checkin_conn.disconnect()
+#         display_synced_data()
+#
+#
+# if __name__ == '__main__':
+#     P1 = Process(target=sync_deleted_user, args=[])
+#     P2 = Process(target=database_users, args=[])
+#     P3 = Process(target=checkout_device, args=[])
+#     P4 = Process(target=checkin_device, args=[])
+#     P5 = Process(target=display_synced_data, args=[])
+#     P1.start()
+#     sleep(2)
+#     P2.start()
+#     sleep(2)
+#     P3.start()
+#     sleep(2)
+#     P4.start()
+#     sleep(2)
+#     P5.start()
+#     P1.join()
+#     P2.join()
+#     P3.join()
+#     P4.join()
+#     P5.join()
+
+
+print("Main Script")
